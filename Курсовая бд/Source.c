@@ -1,4 +1,4 @@
-﻿#define _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -10,8 +10,8 @@
 • Диагональ – это строка, содержащая вещественное числа.
 • Разрешение – это строка, содержащая числа и букву.
 • Тип Матрицы - строка, содержащая заглавные и строчные буквы.
-• Изогнутый экран +\- - строка содержащая цифру (1\0).
-• Разъем HDMI – строка, содержащая цифру(1\0).
+• Изогнутый экран +\- - строка содержащая знаки (+\-).
+• Разъем HDMI – строка, содержащая строчные буквы(да\нет).
 
  Ввод и вывод названия файла на экран;
 – Выход из программы путем нажатия определенной клавиши +
@@ -21,7 +21,7 @@
 – Считывание данных путем нажатия определенной клавиши +
 – Поиск по диагонали(дюймы) +
 – Поиск по типу матрицы +
-– Сортировка данных по производителям(алфавитный порядок) +
+– Сортировка данных по производителям(алфавитный порядок)
 - Вывод в файл +
 
 В задании требуется выполнить поиск по диагонали(дюймы), поиск по типу матрицы. Будет выполняться он следующим образом: ввод данных  сопоставление с данными из файла, при нахождения соответствия производится вывод данных.
@@ -73,7 +73,7 @@ int read_node(FILE* stream, monitor_t* monitor);
 // Считывание БД из файла
 int read_data(FILE* stream, monitor_t* monitor, int* len);
 // Поиск по диагонали
-void search_by_diag(monitor_t* monitors, int len);
+void search_by_diag(monitor_t* monitors, int len, monitor_t* found, int* found_len, double sample);
 // Поиск по типу матрицы
 void search_by_matrix(monitor_t* monitors, int len);
 // Вывод БД на экран
@@ -86,9 +86,14 @@ void output_file(FILE* stream, monitor_t* monitors, int len);
 int cmp_diag(const void* left_, const void* right_);
 // Сортировка по производителям
 void sort(monitor_t* monitor, int size);
+// Функция открывает файл и вызывает функцию read_data
+void read_file(char* filename, monitor_t* monitor, int* len);
+// Функция открывает файл и вызывает функцию output_file
+void output_file_ex(char* filename, monitor_t* monitor, int len);
+
 
 int main() {
-    setlocale(LC_ALL, "Rus");
+    setlocale(LC_ALL, "RUS");
     int len = 0;
     char filename[MAX_FILENAME] = "";
     monitor_t* arr = malloc(sizeof(monitor_t) * MAX_ROWS);
@@ -106,22 +111,9 @@ int main() {
         {
             printf("Введите имя файла: ");
             read_line(filename, MAX_FILENAME);
+            delete_enter(filename);
             printf("Имя файла: %s\n", filename);
-
-            if (filename[strlen(filename) - 1] == '\n')
-                filename[strlen(filename) - 1] = '\0';
-
-            FILE* stream = fopen(filename, "r");
-            if (!stream)
-            {
-                printf("Файл не найден.");
-                continue;
-            }
-            int rc = read_data(stream, arr, &len);
-            fclose(stream);
-
-            if (rc != OK)
-                return rc;
+            read_file(filename, arr, &len);
         }
         else if (choice == 2)
         {
@@ -139,7 +131,16 @@ int main() {
                 printf("БД пуста\n");
                 continue;
             }
-            search_by_diag(arr, len);
+            double search;
+            printf("Введите значение диагонали: ");
+            read_double(&search, 10);
+
+            monitor_t* found = malloc(MAX_ROWS * sizeof(monitor_t));
+            int found_len = 0;
+            search_by_diag(arr, len, found, &found_len, search);
+            printf("Найдено %d записей\n", found_len);
+            if (found_len)
+                output(found, found_len);
         }
         else if (choice == 4)
         {
@@ -165,19 +166,8 @@ int main() {
             printf("Введите имя файла: ");
             read_line(filename, MAX_FILENAME);
             printf("Имя файла: %s\n", filename);
-
-            if (filename[strlen(filename) - 1] == '\n')
-                filename[strlen(filename) - 1] = '\0';
-
-            FILE* stream = fopen(filename, "w");
-            if (!stream)
-            {
-                printf("Ошибка.");
-                continue;
-            }
-            output_file(stream, arr, len);
-            fclose(stream);
-            printf("Данные записаны!\n");
+            delete_enter(filename);
+            output_file_ex(filename, arr, len);
         }
         else if (choice == 7)
         {
@@ -190,6 +180,31 @@ int main() {
         }
     }
     return OK;
+}
+
+void read_file(char* filename, monitor_t* monitor, int* len)
+{
+    FILE* stream = fopen(filename, "r");
+    if (!stream)
+    {
+        fprintf(stderr, "Файл не найден.");
+        return;
+    }
+    read_data(stream, monitor, len);
+    fclose(stream);
+}
+
+void output_file_ex(char* filename, monitor_t* monitor, int len)
+{
+    FILE* stream = fopen(filename, "w");
+    if (!stream)
+    {
+        fprintf(stderr, "Ошибка.");
+        return;
+    }
+    output_file(stream, monitor, len);
+    fclose(stream);
+    printf("Данные записаны!\n");
 }
 
 void delete_enter(char* str)
@@ -206,7 +221,7 @@ size_t read_line(char* dst, size_t n)
     size_t i = 0;
     while ((ch = getchar()) != '\n' && ch != EOF)
     {
-        if (i < n) // TODO помоему тут ошибка
+        if (i < n)
             dst[i++] = ch;
     }
     dst[i] = '\0';
@@ -337,30 +352,14 @@ int read_data(FILE* stream, monitor_t* monitor, int* len)
     return OK;
 }
 
-void search_by_diag(monitor_t* monitors, int len)
+void search_by_diag(monitor_t* monitors, int len, monitor_t* found, int* found_len, double sample)
 {
-    double search;
-    printf("Введите значение диагонали: ");
-    read_double(&search, 10);
-    int counter = 0;
+    *found_len = 0;
     for (int i = 0; i < len; i++)
     {
-        if (fabs(monitors[i].diag - search) <= EPS)
-        {
-            counter++;
-            if (counter == 1)
-            {
-                printf("-----------------------------------------------------------------------------------------------------------------\n");
-                printf("|Производитель                  |Диагональ|Разрешение          |Матрица                       |Изогнутый? |HDMI?|\n");
-                printf("|-------------------------------|---------|--------------------|------------------------------|-----------|-----|\n");
-            }
-            printf("|%-31s|%-9g|%-20s|%-30s|%-11d|%-5d|\n", monitors[i].producer, monitors[i].diag, monitors[i].res, monitors[i].matrix, monitors[i].cured, monitors[i].hdmi);
-        }
+        if (fabs(monitors[i].diag - sample) <= EPS)
+            found[(*found_len)++] = monitors[i];
     }
-    if (counter)
-        printf("-----------------------------------------------------------------------------------------------------------------\n");
-    printf("Найдено %d записей\n", counter);
-
 }
 
 void search_by_matrix(monitor_t* monitors, int len)
@@ -413,7 +412,7 @@ int menu(int len)
         "4. Добавить запись в БД\n"
         "5. Поиск по матрице\n"
         "6. Вывести БД в файл\n"
-        "7. Отсортировать по производителю\n"
+        "7. Отсортировать по производителю (алфавитный порядок)\n"
         "Записей в таблице: %d"
         "\n\nВыберите пункт: ", len);
     int choice;
